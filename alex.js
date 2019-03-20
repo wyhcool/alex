@@ -6,6 +6,24 @@
         window['Alex'] = {};
     }
 
+    //获取浏览器窗口大小
+    function getBrowserWindowSize() {
+        var de = document.documentElement;
+        return {
+            'width': (
+                window.innerWidth
+                || (de && de.clientWidth)
+                || document.body.clientWidth
+            ),
+            'height': (
+                window.innerHeight
+                || (de && de.clientHeight)
+                || document.body.clientHeight
+            )
+        };
+    }
+    window['Alex']['getBrowserWindowSize'] = getBrowserWindowSize;
+
     //指定执行环境
     function bindFunction(obj, func) {
         return function() {
