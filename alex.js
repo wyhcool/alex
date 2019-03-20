@@ -6,6 +6,14 @@
         window['Alex'] = {};
     }
 
+    //指定执行环境
+    function bindFunction(obj, func) {
+        return function() {
+            func.apply(obj, arguments);
+        };
+    }
+    window['Alex']['bindFunction'] = bindFunction;
+
     //使用能力检测来检查必要条件，确定当前浏览器是否与整个库兼容
     function isCompatible(other) { 
         if (other === false
