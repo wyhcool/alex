@@ -49,7 +49,7 @@
     window['Alex']['bindFunction'] = bindFunction;
 
     //使用能力检测来检查必要条件，确定当前浏览器是否与整个库兼容
-    function isCompatible(other) { 
+    function isCompatible(other) {
         if (other === false
             || !Array.prototype.push
             || !Object.hasOwnProperty
@@ -90,6 +90,7 @@
     }
     window['Alex']['$'] = $;
 
+    //document.getElementsByClassName 这个方法只能在 ie9 及其以上的浏览器使用，也就是说 getElementsByClassName 是在支持 html5 的浏览器下才能执行。
     function getElementsByClassName(className, tag, parent) {
         var allTags,
             element,
@@ -229,5 +230,44 @@
         return parent;
     }
     window['Alex']['removeChildren'] = removeChildren;
+
+
+    //遍历 DOM 树，非递归，不计深度，按出现顺序
+    function walkElementsLinear(func, node) {
+        var root = node || window.document;
+        var nodes = root.getElementsByTagName('*');
+        for (var i = 0; i < nodes.length; i++) {
+            func.call(nodes[i]);
+        }
+    }
+    
+    //遍历 DOM 树，递归地，跟踪深度
+    function walkTheDOMRecursive(func, node, depth, returnedFromParent) {
+        var root = node || window.document;
+        returnedFromParent = func.call(root, depth++, returnedFromParent);
+        var node = root.firstChild;
+        while (node) {
+            walkTheDOMRecursive(func, node, depth, returnedFromParent);
+            node = node.nextSibling;
+        }
+    }
+
+    //遍历每个 DOM 节点的属性
+    function walkTheDOMWithAttributes(node, func, depth, returnedFromParent) {
+        var root = node || window.document;
+        returnedFromParent = func.call(root, depth++, returnedFromParent);
+        if (root.attributes) {
+            for (var i = 0; i < root.attributes.length; i++) {
+                walkTheDOMWithAttributes(root.attributes.item(i), func, depth - 1, returnedFromParent);
+            }
+        }
+        if (root.nodeType !== Alex.node.ATTRIBUTE_NODE) {
+            node = root.firstChild;
+            while (node) {
+                walkTheDOMWithAttributes(node, func, depth, returnedFromParent);
+                node = node.nextSibling;
+            }
+        }
+    }
 
 })();
