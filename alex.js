@@ -197,21 +197,6 @@
     }
     window['Alex']['insertAfer'] = insertAfter;
 
-    function removeChildren(parent) {
-        if (!(parent = $(parent))) {
-            return false;
-        }
-        //当存在子节点时删除该子节点
-        while (parent.firstChild) {
-            //TODO: Why not use
-            // parent.removeChild(parent.firstChild);
-            parent.firstChild.parentNode.removeChild(parent.firstChild);
-        }
-        //返回父元素，以便实现级连
-        return parent;
-    }
-    window['Alex']['removeChildren'] = removeChildren;
-
     function prependChild(parent, newChild) {
         if (!(parent = $(parent))) {
             return false;
@@ -229,5 +214,20 @@
         return parent;
     }
     window['Alex']['prependChild'] = prependChild;
+
+    function removeChildren(parent) {
+        if (!(parent = $(parent))) {
+            return false;
+        }
+        //当存在子节点时删除该子节点
+        while (parent.firstChild) {
+            //TODO: Why not use
+            // parent.removeChild(parent.firstChild);
+            parent.firstChild.parentNode.removeChild(parent.firstChild);
+        }
+        //返回父元素，以便实现级连
+        return parent;
+    }
+    window['Alex']['removeChildren'] = removeChildren;
 
 })();
