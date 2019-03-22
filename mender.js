@@ -51,4 +51,14 @@ if (!String.prototype.repeat) {
 
         return rpt;
     }
-  }
+}
+// trim() 方法删除一个字符串两端的空白字符。
+// 在这个上下文中的空白字符是所有的空白字符 (space, tab, non-break space 等) 以及所有行终止符字符（如 LF，CR）。
+if (!String.prototype.trim) {
+    String.prototype.trim = function () {
+        return this.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
+    };
+}
+// 通常所用的空格是 \x20 ，是在标准 ASCII 可见字符 0x20~0x7e 范围内。
+// 而 \xa0 属于 latin1 （ISO/IEC_8859-1）中的扩展字符集字符，代表空白符nbsp(non-breaking space)。
+// latin1 字符集向下兼容 ASCII （ 0x20~0x7e ）。
