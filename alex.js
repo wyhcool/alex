@@ -270,4 +270,15 @@
         }
     }
 
+    //驼峰化一个连字符连接的字符串
+    //主要用于处理嵌入的样式属性
+    //CSS 属性中使用了连字符，在 ECMAScript 连字符用作减号，不能用作标识符
+    function camelize(s) {
+        return s.replace(/-(\w)/g, function(strMatch, captureGroup) {
+            return captureGroup.toUpperCase();
+        });
+    }
+    window['Alex']['camelize'] = camelize;
+
+
 })();
