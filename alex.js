@@ -251,6 +251,7 @@
             node = node.nextSibling;
         }
     }
+    window['Alex']['walkTheDOMRecursive'] = walkTheDOMRecursive;
 
     //遍历每个 DOM 节点的属性
     function walkTheDOMWithAttributes(node, func, depth, returnedFromParent) {
@@ -269,6 +270,7 @@
             }
         }
     }
+    window['Alex']['walkTheDOMWithAttributes'] = walkTheDOMWithAttributes;
 
     //驼峰化一个连字符连接的字符串
     //主要用于处理嵌入的样式属性
