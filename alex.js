@@ -50,14 +50,14 @@
 
     //使用能力检测来检查必要条件，确定当前浏览器是否与整个库兼容
     function isCompatible(other) {
-        if (other === false
-            || !Array.prototype.push
-            || !Object.hasOwnProperty
-            || !document.createElement
-            || !document.getElementsByClassName
-        ) {
-            return false;
-        }
+        // if (other === false
+        //     || !Array.prototype.push
+        //     || !Object.hasOwnProperty
+        //     || !document.createElement
+        //     || !document.getElementsByClassName
+        // ) {
+        //     return false;
+        // }
         return true;
     }
     window['Alex']['isCompatible'] = isCompatible;
@@ -137,7 +137,7 @@
             node.addEventListener(type, listener, false);
             return true;
         } else if (node.attachEvent) {
-            //MSIE
+            //MSIE，兼容 IE8 IE7
             node["e" + type + listener] = listener;
             node[type + listener] = function() {
                 node["e" + type + listener](window.event);
