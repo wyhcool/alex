@@ -134,12 +134,15 @@
 
         if (node.addEventListener) {
             //W3C
+            //当使用 addEventListener() 为一个元素注册事件的时候，句柄里的 this 值是该元素的引用。
             node.addEventListener(type, listener, false);
             return true;
         } else if (node.attachEvent) {
             //MSIE，兼容 IE8 IE7
             node["e" + type + listener] = listener;
+            //使用 attachEvent 方法有个缺点，this 的值会变成 window 对象的引用而不是触发事件的元素。
             node[type + listener] = function() {
+                //重新绑定 this 到触发元素
                 node["e" + type + listener](window.event);
             };
             node.attachEvent("on" + type, node[type + listener]);
