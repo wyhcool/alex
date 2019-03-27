@@ -135,6 +135,7 @@
         if (node.addEventListener) {
             //W3C
             //当使用 addEventListener() 为一个元素注册事件的时候，句柄里的 this 值是该元素的引用。
+            //第三个参数设置为 false，将 DOM 的默认方法设置为只接收事件冒泡，与 MSIE 下保持一致
             node.addEventListener(type, listener, false);
             return true;
         } else if (node.attachEvent) {
@@ -142,7 +143,7 @@
             node["e" + type + listener] = listener;
             //使用 attachEvent 方法有个缺点，this 的值会变成 window 对象的引用而不是触发事件的元素。
             node[type + listener] = function() {
-                //重新绑定 this 到触发元素
+                //通过使用匿名函数使 this 关键字在 MSIE 和 W3C 的环境中保持一致，this 引用的是将侦听器指派给的对象
                 node["e" + type + listener](window.event);
             };
             node.attachEvent("on" + type, node[type + listener]);
@@ -154,6 +155,59 @@
     }
     window['Alex']['addEvent'] = addEvent;
    
+    function addLoadEvent(loadEvent, waitForImages) {
+        if (!isCompatible()) { return false; }
+
+        //如果等待标记是 true，则使用常规的添加事件的方法
+        if (waitForImages) {
+            return addEvent(window, 'load', loadEvent);
+        }
+
+        //否则使用一些不同的方式包装 loadEvent() 方法
+
+        //以便为 this 关键字指定正确的内容、同时确保事件不会被执行两次
+        var done = false;
+        var init = function() {
+            //如果这个函数已经被调用过了则返回
+            if (!done) {
+                done = true;
+                //在 document 环境中运行载入事件
+                loadEvent.apply(document, arguments);
+            }
+        };
+
+        //如果支持 readyState 且已加载
+        if (document.readyState === 'complete') {
+            init();
+        } else if (document.addEventListener) {
+            //如果支持 DOMContentLoaded 事件，当所有 DOM 解析完后会触发这个事件
+            document.addEventListener('DOMContentLoaded', init, false);
+            
+            document.addEventListener('load', init, false);
+        } else {
+            //http://javascript.nwbox.com/IEContentLoaded/
+            (function () {
+                try {
+                    // throws errors until after ondocumentready
+                    document.documentElement.doScroll('left');
+                } catch (e) {
+                    setTimeout(arguments.callee, 50);
+                    return;
+                }
+                // no errors, fire
+                init();
+            })();
+
+            document.attachEvent("onreadystatechange", function() {
+                if (document.readyState === 'complete') {
+                    document.onreadystatechange = null;
+                    init();
+                }
+            });
+            window.attachEvent("onload", init);
+        }
+    }
+    window['Alex']['addLoadEvent'] = addLoadEvent;
 
     function removeEvent(node, type, listener) {
         if (!(node = $(node))) { return false; }
@@ -173,6 +227,114 @@
         return false;
     }
     window['Alex']['removeEvent'] = removeEvent;
+
+    //取消冒泡阶段
+    function stopPropagation(eventObject) {
+        eventObject = eventObject || getEventObject(eventObject);
+        if (eventObject.stopPropagation) {
+            eventObject.stopPropagation();
+        } else {
+            eventObject.cancelBubble = true;
+        }
+    };
+    window['Alex']['stopPropagation'] = stopPropagation;
+
+    //取消默认动作
+    function preventDefault(eventObject) {
+        eventObject = eventObject || getEventObject(eventObject);
+        if (eventObject.preventDefault) {
+            eventObject.preventDefault();
+        } else {
+            eventObject.returnValue = false;
+        }
+    }
+    window['Alex']['preventDefault'] = preventDefault;
+
+    //获取事件对象
+    function getEventObject(eventObject) {
+        return eventObject || window.event;
+    }
+    window['Alex']['getEventObject'] = getEventObject;
+
+    //访问事件的目标对象
+    function getTarget(eventObject) {
+        eventObject = eventObject || getEventObject(eventObject);
+
+        //如果是 W3C 或 MSIE 的模型
+        var target = eventObject.target || eventObject.srcElement;
+
+        //如果像 Safari 中一样是文本节点，则重新将目标指定为父元素
+        if (target.nodeType === Alex.node.TEXT_NODE) {
+            target = target.parentNode;
+        }
+
+        return target;
+    }
+    window['Alex']['getTarget'] = getTarget;
+
+    //确定鼠标按下的键
+    function getMouseButton(eventObject) {
+        eventObject = eventObject || getEventObject(eventObject);
+
+        var buttons = {
+            left: false,
+            middle: false,
+            right: false
+        };
+
+        //检查 eventObject 对象的 toString() 方法的值
+        //W3C DOM 对象有 toString 方法且返回值中包含有 MouseEvent 字段
+        if (eventObject.toString && eventObject.toString().indexOf('MouseEvent') !== -1) {
+            //W3C
+            switch(eventObject.button) {
+                case 0: buttons.left = true; break;
+                case 1: buttons.middle = true; break;
+                case 2: buttons.right = true; break;
+                default: break;
+            }
+        } else if (eventObject.button) {
+            //MSIE
+            switch(eventObject.button) {
+                case 1: buttons.left = true; break;
+                case 2: buttons.right = true; break;
+                case 3: 
+                    buttons.left = true;
+                    buttons.right = true; 
+                    break;
+                case 4: buttons.middle = true;
+                case 5:
+                    buttons.left = true;
+                    buttons.middle = true; 
+                    break;
+                case 6:
+                    buttons.right = true;
+                    buttons.middle = true; 
+                    break;
+                case 7:
+                    buttons.left = true;
+                    buttons.right = true;
+                    buttons.middle = true; 
+                    break;
+                default: break;
+            }
+        } else {
+            return false;
+        }
+
+        return buttons;
+    }
+    window['Alex']['getMouseButton'] = getMouseButton;
+
+    //获取鼠标的位置
+    function getPointerPositionInDocuemnt(eventObject) {
+        eventObject = eventObject || getEventObject(eventObject);
+
+        var x = eventObject.pageX || (eventObject.clientX + (document.documentElement.scrollLeft || document.body.scrollLeft));
+        var y = eventObject.pageY || (eventObject.clientY + (document.documentElement.scrollTop || document.body.scrollTop));
+        
+        return {x: x, y: y};
+    }
+    window['Alex']['getPointerPositionInDocuemnt'] = getPointerPositionInDocuemnt;
 
     //切换 DOM 树中元素的可见性
     function toggleDisplay(node, value) {
@@ -218,6 +380,19 @@
         return parent;
     }
     window['Alex']['prependChild'] = prependChild;
+
+    // 解决 IE < 9 不能转化 DOM Collections
+    function convertToArray(nodes) {
+        var array = [];
+        try {
+            array = [].prototype.slice.call(nodes, 0);
+        } catch (ex) {
+            for (var i = 0, len = nodes.length; i < len; i++) {
+                array.push(nodes[i]);
+            }
+        }
+        return array;
+    }
 
     function removeChildren(parent) {
         if (!(parent = $(parent))) {
