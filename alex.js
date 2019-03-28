@@ -351,6 +351,249 @@
     }
     window['Alex']['toggleDisplay'] = toggleDisplay;
 
+    //通过id修改单个元素的样式
+    function setStyleById(element, styles) {
+        if (!(element = $(element))) {
+            return false;
+        }
+
+        for (var property in styles) {
+            if (!styles.hasOwnProperty(property)) {
+                continue;
+            }
+            if (element.style.setProperty) {
+                element.style.setProperty(property, styles[property], null);
+            } else {
+                element.style[camelize(property)] = styles[property];
+            }
+        }
+        return true;
+    }
+    window['Alex']['setStyleById'] = setStyleById;
+
+    //通过类名修改多个元素的样式
+    function setStyleByClassName(parent, tag, className, styles) {
+        if (!(parent = $(parent))) {
+            return false;
+        }
+        var elements = getElementsByClassName(parent, tag, className);
+        for (var i = 0, len = elements.length; i < len; i++) {
+            setStyleById(elements[i], styles);
+        }
+        return true;
+    }
+    window['Alex']['setStyleByClassName'] = setStyleByClassName;
+
+    //通过标签名修改多个元素的样式
+    function setStyleByTagName(tagName, styles, parent) {
+        parent = $(parent) || document;
+        var elements = parent.getElementsByTagName(tagName);
+        for (var i = 0, len = elements.length; i < len; i++) {
+            setStyleById(elements[i], styles);
+        }
+        return true;
+    }
+    window['Alex']['setStyleByTagName'] = setStyleByTagName;
+
+    //取得包含元素类名的数组
+    function getClassNames(element) {
+        if (!(element = $(element))) {
+            return false;
+        }
+        //用一个空格替换多个空格，然后基于空格分割类名
+        return element.className.replace(/\s+/g, ' ').split(' ');
+    }
+    window['Alex']['getClassNames'] = getClassNames;
+
+    //检查元素中是否存在某个类
+    function hasClassName(element, className) {
+        if (!(element = $(element))) {
+            return false;
+        }
+        var classes = getClassNames(element);
+        for (var i = 0, len = classes.length; i < len; i++) {
+            if (classes[i] === className) {
+                return true;
+            } 
+        }
+        return false;
+    }
+    window['Alex']['hasClassName'] = hasClassName;
+
+    //为元素添加类
+    function addClassName(element, className) {
+        if (!(element = $(element))) {
+            return false;
+        }
+        element.className += (element.className ? ' ' : '') + className;
+        return true;
+    }
+    window['Alex']['addClassName'] = addClassName;
+
+    //从元素中删除类
+    function removeClassName(element, className) {
+        if (!(element = $(element))) {
+            return false;
+        }
+        var classes = getClassNames(element);
+        //遍历数组删除匹配项，需要反向循环
+        for (var len = classes.length, i = len - 1; i >= 0; i--) {
+            if (classes[i] === className) {
+                classes.splice(i, 1);
+            }
+        }
+        element.className = classes.join(' ');
+        return (len === classes.length ? false : true);
+    }
+    window['Alex']['removeClassName'] = removeClassName;
+
+    //添加新的样式表
+    function addStyleSheet(url, media) {
+        media = media || 'screen';
+        var link = document.createElement('LINK');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('type', 'text/css');
+        link.setAttribute('href', url);
+        link.setAttribute('media', media);
+        document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    window['Alex']['addStyleSheet'] = addStyleSheet;
+
+    //移除样式表
+    function removeStyleSheet(url, media) {
+        var styles = getStyleSheets(url, media);
+        for (var i = 0, len = styles.length; i < len; i++) {
+            //样式表所属节点
+            //W3C styleSheet.ownerNode; IE styleSheet.owningElement
+            var node = styles[i].ownerNode || styles[i].owningElement;
+            //禁用样式表
+            styles[i].disabled = true;
+            //移除节点
+            node.parentNode.removeChild(node);
+        }
+    }
+    window['Alex']['removeStyleSheet'] = removeStyleSheet;
+
+    //通过 URL 和 media(可选) 取得包含所有样式表的数组
+    function getStyleSheets(url, media) {
+        var sheets = [];
+        for (var i = 0, len = document.styleSheets.length; i < len; i++) {
+            if (url && document.styleSheets[i].href.indexOf(url) === -1) {
+                continue;
+            }
+            if (media) {
+                //规范化 media 字符串
+                media = media.replace(/,\s*/g, ',');
+                var sheetMedia;
+
+                if (document.styleSheets[i].media.mediaText) {
+                    //W3C
+                    sheetMedia = document.styleSheets[i].media.mediaText.replace(/,\s*/g, ',');
+                    //safari 会添加额外的逗号和空格
+                    sheetMedia = sheetMedia.replace(/,\s*$/, '');
+                } else {
+                    //MSIE
+                    sheetMedia = document.styleSheets[i].media.replace(/,\s*/g, ',');
+                }
+
+                if (media !== sheetMedia) {
+                    continue;
+                }
+            }
+            sheets.push(document.styleSheets[i]);
+        }
+        return sheets;
+    }
+    window['Alex']['getStyleSheets'] = getStyleSheets;
+
+    //编辑一条样式规则
+    function editCSSRule(selector, styles, url, media) {
+        var styleSheets = getStyleSheets(url, media);
+        xxx = styleSheets;
+        for (var i = 0, len = styleSheets.length; i < len; i++) {
+            //取得规则列表
+            //W3C styleSheets[i].cssRules; IE styleSheets[i].rules
+            var rules = styleSheets[i].cssRules || styleSheets[i].rules;
+            if (!rules) {
+                continue;
+            }
+
+            //由于 IE 默认使用大写，故转换为大写形式
+            //注意如果使用区分大小写的 id，可能会有冲突
+            selector = selector.toUpperCase();
+
+            for (var j = 0; j < rules.length; j++) {
+                //检查匹配
+                if (rules[j].selectorText.toUpperCase() === selector) {
+                    for (var property in styles) {
+                        if (!styles.hasOwnProperty(property)) {
+                            continue;
+                        }
+                        rules[j].style[camelize(property)] = styles[property];
+                    }
+                }
+            }
+        }
+    }
+    window['Alex']['editCSSRule'] = editCSSRule;
+
+    //添加一条样式规则
+    function addCSSRule(selector, styles, index, url, media) {
+        var declaration = '';
+
+        for (var property in styles) {
+            if (!styles.hasOwnProperty(property)) {
+                continue;
+            }
+            declaration += property + ':' + styles[property] + '; ';
+        }
+
+        var styleSheets = getStyleSheets(url, media);
+
+        var newIndex;
+        for (var i = 0, len = styleSheets.length; i < len; i++) {
+            //添加规则
+            if (styleSheets[i].insertRule) {
+                //W3C
+                //index = length 是列表的末尾
+                newIndex = (index >= 0 ? index : styleSheets[i].cssRules.length);
+                styleSheets[i].insertRule(selector + ' { ' + declaration + ' } ', newIndex);
+            } else if (styleSheets[i].addRule) {
+                //IE
+                //index = -1 是列表末尾
+                newIndex = (index >= 0 ? index : -1);
+                styleSheets[i].addRule(selector, declaration, newIndex);
+            }
+        }
+    }
+    window['Alex']['addCSSRule'] = addCSSRule;
+
+    //取得一个元素的计算样式
+    function getStyle(element, property) {
+        if (!(element = $(element))) {
+            return false;
+        }
+
+        //检测元素 style 属性中的值
+        var value = element.style[camelize(property)];
+        if (!value) {
+            //取得计算值
+            if (document.defaultView && document.defaultView.getComputedStyle) {
+                //W3C
+                var css = document.defaultView.getComputedStyle(element, null);
+                value = css ? css.getPropertyValue(property) : null;
+            } else if (element.currentStyle) {
+                //MSIE
+                vlaue = element.currentStyle[camelize(property)];
+            }
+
+        }
+        //返回空字符串而不是 auto
+        return value === 'auto' ? '' : value;
+    }
+    window['Alex']['getStyle'] = getStyle;
+    window['Alex']['getStyleById'] = getStyle;
+
     function insertAfter(node, referenceNode) {
         if (!(node = $(node))) {
             return false;
