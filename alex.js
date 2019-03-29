@@ -27,9 +27,9 @@
         var de = document.documentElement;
         return {
             'width': (
-                window.innerWidth
-                || (de && de.clientWidth)
-                || document.body.clientWidth
+                window.innerWidth //最常用，可用 self.innerWidth 替换，self 指窗口本身，它返回的对象跟 window 对象是一模一样的
+                || (de && de.clientWidth) //MSIE 严格模型
+                || document.body.clientWidth //MSIE怪异(quirk)模式
             ),
             'height': (
                 window.innerHeight
@@ -702,6 +702,273 @@
         });
     }
     window['Alex']['camelize'] = camelize;
+
+    //设置 XMLHttpRequest 对象的各个不同的部分
+    function getRequestObject(url, options) {
+        //初始化请求对象
+        var req = false;
+        if (window.XMLHttpRequest) {
+            req = new window.XMLHttpRequest();
+        } else if (window.ActiveXObject) {
+            req = new window.ActiveXObject('Microsoft.XMLHTTP');
+        }
+
+        if (!req) {
+            return false;
+        }
+
+        //定义默认的选项
+        options = options || {};
+        options.method = options.method || 'GET';
+        options.send = options.send || null;
+
+        //为请求的各个阶段定义不同的侦听器
+        req.onreadystatechange = function() {
+            switch(req.readyState) {
+                case 1:
+                    //载入中
+                    if (options.loadListener) {
+                        options.loadListener.apply(req, arguments);
+                    }
+                    break;
+                case 2:
+                    //载入完成
+                    if (options.loadedListener) {
+                        options.loadedListener.apply(req, arguments);
+                    }
+                    break;
+                case 3:
+                    //交互
+                    if (options.interactiveListener) {
+                        options.interactiveListener.apply(req, arguments);
+                    }
+                    break;
+                case 4:
+                    //完成
+                    //如果失败抛出错误
+                    try {
+                        if (req.status && req.status === 200) {
+
+                            //针对 content-type 的特殊侦听器
+                            //由于 Content-Type 头部可能包含字符集，需要通过正则提出所需部分
+                            var contentType = req.getRequestHeader('Content-Type');
+                            var mimeType = contentType.match(/\s*([^;]+)\s*(;|$)/i)[1];
+
+                            switch(mimeType) {
+                                case 'text/javascript':
+                                case 'application/javascript':
+                                    //响应是 javascript，以 req.responseText 作为回调的参数
+                                    if (options.jsResponseListener) {
+                                        options.jsResponseListener.call(req, req.responseText);
+                                    }
+                                    break;
+                                case 'application/json':
+                                    //响应是 json,对 req.responseText 进行解析，返回 json 对象
+                                    if (options.jsonResponseListener) {
+                                        try {
+                                            var json = Alex.jsonParse(req.responseText);
+                                        } catch (ex) {
+                                            json = false;
+                                        }
+                                        options.jsonResponseListener.call(req, json);
+                                    }
+                                    break;
+                                case 'text/xml':
+                                    //响应是 xml
+                                    if (options.xmlResponseListener) {
+                                        options.xmlResponseListener.call(req, req.responseXML);
+                                    }
+                                    break;
+                                case 'text/html':
+                                    //响应是 html
+                                    if (options.htmlResponseListener) {
+                                        options.htmlResponseListener.call(req, req.responseText);
+                                    }
+                                    break;
+                                    
+                            }
+                            //针对响应成功完成的侦听器
+                            if (options.completeListener) {
+                                options.completeListener.apply(req, arguments);
+                            }
+
+                        } else {
+                            //响应完成却存在错误
+                            if (options.errorListener) {
+                                options.errorListener.apply(req, arguments);
+                            }
+                        }
+                    } catch (ex) {
+                        //忽略错误
+                    }
+                    break;
+            }
+        };
+
+        //开启请求
+        req.open(options.method, url, true);
+        //添加特殊头部信息以标识请求
+        req.setRequestHeader('X-ADS-Ajax-Request', 'AjaxRequest');
+        return req;
+    }
+    window['Alex']['getRequestObject'] = getRequestObject;
+
+    //通过包装 getRequestObject() 方法和 send() 方法发送 XMLHttpRequest 对象的请求
+    function ajaxRequest(url, options) {
+        var req = getRequestObject(url, options);
+        return req.send(options.send);
+    }
+    window['Alex']['ajaxRequest'] = ajaxRequest;
+
+    //跨域资源共享 JSONP 实现
+    //XssHttpRequest 对象的计数器
+    var XssHttpRequestCount = 0;
+    //XssHttpRequest 对象的一个跨站点 <script> 标签的实现
+    var XssHttpRequest = function() {
+        this.requestID = 'XSS_HTTP_REQUEST_' + (++XssHttpRequestCount);
+    }
+    XssHttpRequest.prototype = {
+        url: null,
+        scriptObject: null,
+        responseJSON: null,
+        status: 0,
+        readyState: 0,
+        timeout: 30000,
+        onreadystatechange: function() { },
+
+        setReadyState: function(newReadyState){
+            //如果比当前状态更新，则只更新就绪状态
+            if (this.readyState < newReadyState || newReadyState === 0) {
+                this.readyState = newReadyState;
+                this.onreadystatechange();
+            }
+        },
+
+        open: function(url, timeout) {
+            this.timeout = timeout || 30000;
+            //把一个名为 XSS_HTTP_REQUEST_CALLBACK 的特殊变量附加给 URL，其中包含本次请求的回调函数的名称
+            this.url = url + ((url.indexOf('?') !== -1) ? '&' : '?') + 'XSS_HTTP_REQUEST_CALLBACK=' + this.requestID + '_CALLABCK';
+            this.setReadyState(0);
+        },
+
+        send: function() {
+            var requestObject = this;
+
+            //创建一个载入外部数据的新 script 对象
+            this.scriptObject = document.createElement('SCRIPT');
+            this.scriptObject.setAttribute('id', this.requestID);
+            this.scriptObject.setAttribute('type', 'text/javascript');
+
+            //尚未设置 src 属性，也不将其添加到文档
+
+            //创建一个在给定毫秒数之后触发的 setTimeout() 方法
+            //如果在给定的事件内脚本没有载入完成，则取消载入
+            var timeoutWatcher = setTimeout(function() {
+                //在脚本晚于假定的停止时间之后载入的情况下，通过一个空方法重新赋值
+                window[this.requestID + '_CALLBACK'] = function() {};
+
+                //移除脚本以防止进一步载入
+                requestObject.scriptObject.parentNode.removeChild(requestObject.scriptObject);
+
+                //将状态设置为错误
+                requestObject.status = 2;
+                requestObject.statusText = 'Timeout after' + requestObject.timeout + ' milliseconds.';
+
+                //更新就绪状态
+                requestObject.setReadyState(2);
+                requestObject.setReadyState(3);
+                requestObject.setReadyState(4);
+            }, this.timeout);
+
+
+            //创建与请求中的回调方法匹配的方法
+            //必须是全局方法，相当于在不同的 <script\> 中调用方法
+            window[this.requestID + '_CALLBACK'] = function(JSON) {
+                //当脚本载入时将执行该方法，同时传入预期的 JSON 对象
+
+                //在请求载入成功时清除 timeoutWatcher 方法
+                clearTimeout(timeoutWatcher);
+
+                //更新就绪状态
+                requestObject.setReadyState(2);
+                requestObject.setReadyState(3);
+
+                //将状态设置为成功
+                requestObject.requestJSON = JSON;
+                requestObject.status = 1;
+                requestObject.statusText = 'Loaded';
+
+                //更新就绪状态
+                requestObject.setReadyState(4);
+            };
+
+            //设置初始就绪状态
+            this.setReadyState(1);
+
+            //最后设置 src 属性并将其添加到文档头部，这样才会载入脚本
+            this.scriptObject.setAttribute('src', this.url);
+            var head = document.getElementsByTagName('head')[0];
+            head.appendChild(this.scriptObject);
+        }
+    };
+
+    window['Alex']['XssHttpRequest'] = XssHttpRequest;
+
+    //设置 XssHttpRequest 对象的不同部分
+    function getXssRequestObject(url, options) {
+        var req = new XssHttpRequest();
+
+        options = options || {};
+        //默认中断时间为 30 秒
+        options.timeout = options.timeout || 30000;
+        req.onreadystatechange = function() {
+            switch(req.readyState) {
+                case 1:
+                    //载入中
+                    if (options.loadListener) {
+                        options.loadListener.apply(req, arguments);
+                    }
+                    break;
+                case 2:
+                    //载入完成
+                    if (options.loadedListener) {
+                        options.loadedListener.apply(req, arguments);
+                    }
+                    break;
+                case 3:
+                    //交互
+                    if (options.interactiveListener) {
+                        options.interactiveListener.apply(req, arguments);
+                    }
+                    break;
+                case 4:
+                    //完成
+                    if (req.status === 1) {
+                        if (options.completeListener) {
+                            options.completeListener.apply(req, arguments);
+                        }
+                    } else {
+                        if (options.errorListener) {
+                            options.errorListener.apply(req, arguments);
+                        }
+                    }
+                    break;
+            }
+        };
+        req.open(url, options, timeout);
+
+        return req;
+    }
+    window['Alex']['getXssRequestObject'] = getXssRequestObject;
+
+    //发送 XssHttpRequest 对象
+    function xssRequest(url, options) {
+        var req = getXssRequestObject(url, options);
+        return req.send(null);
+    }
+    window['Alex']['xssRequest'] = xssRequest;
+
+    
 
 
 })();
