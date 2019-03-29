@@ -820,6 +820,10 @@
     }
     window['Alex']['ajaxRequest'] = ajaxRequest;
 
+    //
+    //请求排队
+
+
     //跨域资源共享 JSONP 实现
     //XssHttpRequest 对象的计数器
     var XssHttpRequestCount = 0;
@@ -968,7 +972,231 @@
     }
     window['Alex']['xssRequest'] = xssRequest;
 
-    
+    //生成回调函数
+    function makeCallback(method, target) {
+        return function() {
+            method.apply(target, arguments);
+        }
+    }
 
+    //跟踪地址变化
+    //一个用来基于 hash 触发注册的方法的 URL hash 侦听器
+    var actionPager = {
+        //前一个 hash
+        lastHash: '',
+        //为 hash 模式注册的方法列表
+        callbacks: [],
+        //Safari 历史记录列表
+        safariHistory: false,
+        //IE iframe 引用
+        msieHistory: false,
+        //应该被转换的链接的类名
+        ajaxifyClassName: '',
+        //应用程序的根目录，当创建 hash 时它将是被清理后的 URL
+        ajaxifyRoot: '',
+
+        init: function(ajaxifyClass, ajaxifyRoot, startingHash) {
+            
+            this.ajaxifyClassName = ajaxifyClass || 'AlexActionLink';
+            this.ajaxifyRoot = ajaxifyRoot || '';
+
+            var ua = navigator.userAgent;
+            if (/Safari/i.test(ua)) {
+                this.safariHistory = [];
+            } else if (/MSIE/i.test(ua)) {
+                //MSIE 添加一个 iframe 以便跟踪重写后退按钮
+                this.msieHistory = document.createElement('IFRAME');
+                this.msieHistory.setAttribute('id', 'msieHistory');
+                this.msieHistory.setAttribute('name', 'msieHistory');
+                setStyleById(this.msieHistory, {
+                    'width': '100px',
+                    'height': '100px',
+                    'border': '1px solid black',
+                    'visibility': 'visible',
+                    'zindex': -1
+                });
+                document.body.appendChild(this.msieHistory);
+                this.msieHistory = frames['msieHistory'];
+            }
+            
+            //将链接转换为 Ajax 链接
+            this.ajaxifyLinks();
+
+            //取得当前地址
+            var location = this.getLocation();
+
+            //检测地址中是否包含了 hash
+            if (!location.hash && !startingHash) {
+                startingHash = 'start';
+            }
+
+            //按照需要保存 hash
+            var ajaxHash = this.getHashFromURL(location.hash) || startingHash;
+            this.addBackButtonHash(ajaxHash);
+
+            //添加监视事件以观察地址栏中的变化
+            var watcherCallback = makeCallback(
+                this.watchLocationForChange,
+                this
+            );
+            
+            window.setInterval(watcherCallback, 200);
+
+        },
+
+        //将链接转换为锚以便 Ajax 进行处理
+        ajaxifyLinks: function() {
+            var links = getElementsByClassName(this.ajaxifyClassName, 'a', document);
+            for (var i = 0, len = links.length; i < len; i++) {
+                if (hasClassName(links[i], 'AlexActionPagerModified')) {
+                    continue;
+                }
+
+                //将 href 转换为 #value 形式
+                links[i].setAttribute('href', 
+                        this.convertURLToHash(links[i].getAttribute('href')));
+
+                //注册单击事件以便在必要时添加历史记录
+                addEvent(links[i], 'click', function() {
+                    if (this.href && this.href.indexOf('#') > -1) {
+                        actionPager.addBackButtonHash(
+                            actionPager.getHashFromURL(this.href)
+                        );
+                    }
+                });
+            }
+        },
+
+        //保存 hash
+        addBackButtonHash: function(ajaxHash) {
+            //保存 hash
+            if (!ajaxHash) {
+                return false;
+            }
+            if (this.safariHistory !== false) {
+                //为 safari 使用特殊数组
+                if (this.safariHistory.length === 0) {
+                    this.safariHistory[window.history.length] = ajaxHash;
+                } else {
+                    this.safariHistory[window.history.length+1] = ajaxHash;
+                }
+            } else if (this.msieHistory !== false) {
+                //在 MSIE 中通过导航 iframe
+                this.msieHistory.document.execCommand('Stop');
+                this.msieHistory.location.href = '/fakepage?hash=' + ajaxHash + '&title=' + document.title;
+            } else {
+                //通过改变地址的值
+                var timeoutCallback = makeCallback(function() {
+                    if (tihis.getHashFromURL(window.location.href) !== ajaxHash) {
+                        window.location.replace(location.href + '#' + ajaxHash);
+                    }
+                }, this);
+                setTimeout(timeoutCallback, 200);
+            }
+            return true;
+        },
+
+        watchLocationForChange: function() {
+            var newHash;
+            //取得新的 hash 值
+            if (this.safariHistory !== false) {
+                if (this.safariHistory[history.length]) {
+                    newHash = this.safariHistory[history.length];
+                }
+            } else if (this.msieHistory !== false) {
+                newHash = this.msieHistory.location.href.split('&')[0].split('=')[1];
+            } else if (location.hash !== '') {
+                newHash = this.getHashFromURL(window.location.href);
+            }
+
+            //如果新 hash 值与最后一次 hash 值不相同，则更新页面
+            if (newHash && this.lastHash !== newHash) {
+                if (this.msieHistory !== false && this.getHashFromURL(window.location.href) !== newHash) {
+                    //修复MSIE中的地址栏
+                    location.hash = newHash;
+                }
+
+                //在发生异常的情况下使用 try-catch 结构
+                try {
+                    this.executeListeners(newHash);
+                    this.ajaxifyLinks();
+                } catch (ex) {
+                    //TODO
+                    alert(ex);
+                }
+
+                //将其保存为最后一个 hash
+                this.lastHash = newHash;
+            }
+        },
+
+        register: function(regex, method, context) {
+            var obj = {'regex': regex};
+            if (context) {
+                obj.callback = function(matches) {
+                    method.apply(context, matches);
+                }
+            } else {
+                obj.callback = function(matches) {
+                    method.apply(window, matches);
+                }
+            }
+            //将侦听器添加到回调函数数组中
+            this.callback.push(obj);
+        },
+
+        convertURLToHash: function(url) {
+            if (!url) {
+                //没有 url，因而返回一个 #
+                return '#';
+            } else if (url.indexOf('#') !== -1) {
+                //存在 hash，因而返回它
+                return url.split('#')[1];
+            } else {
+                //不存在 hash
+                //如果 URL 中包含域名(MSIE)，则去掉
+                if (url.indexOf('://') !== -1) {
+                    url = url.match(/:\/\/[^\/]+(.*)/)[1];
+                }
+                //按照 init() 中的约定去掉根目录
+                return '#' + url.substr(this.ajaxifyRoot.length);
+            }
+        },
+
+        getHashFromURL: function(url) {
+            if (!url || url.indexOf('#') === -1) {
+                return '';
+            }
+            return url.split('#')[1];
+        },
+
+        getLocation: function() {
+            //检查 hash
+            if (!window.location.hash) {
+                //没有则生成一个
+                var url = {host: null, hash: null};
+                if (window.location.href.indexOf('#') > -1) {
+                    parts = window.location.href.split('#');
+                    url.domain = parts[0];
+                    url.hash = parts[1];
+                } else {
+                    url.domain = window.location;
+                }
+            }
+            return window.location;
+        },
+
+        //执行与 hash 匹配的侦听器 
+        executeListeners: function(hash) {
+            //执行与 hash 匹配的任何侦听器
+            var matches;
+            for (var i in this.callbacks) {
+                if (matches = hash.match(this.callbacks[i].regex)) {
+                    this.callbacks[i].callback(matches);
+                }
+            }
+        }
+    };
+    window['Alex']['actionPager'] = actionPager;
 
 })();
