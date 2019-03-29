@@ -820,9 +820,118 @@
     }
     window['Alex']['ajaxRequest'] = ajaxRequest;
 
-    //
-    //请求排队
+    //深度复制
+    //复制 JavaScript 对象
+    function clone(obj) {
+        if (typeof obj !== 'object') {
+            return obj;
+        }
+        if (typeof obj === null) {
+            return null;
+        }
+        var newObj = {};
+        for (var i in obj) {
+            newObj[i] = clone(obj[i]);
+        }
+        return newObj;
+    }
 
+    //请求排队
+    //保存队列的数组
+    var requestQueue = [];
+
+    //使 ajaxRequest 方法启用排队功能的包装对象
+    function ajaxRequestQueue(url, options, queue) {
+        queue = queue || 'default';
+
+        //这个对象把可选的侦听器包装在另一个函数中，因此可选的对象必须是唯一的
+        //否则该方法被调用时使用的是共享的可选队形，那么会导致陷入递归中
+        options = clone(options) || {};
+
+        if (!requestQueue[queue]) {
+            requestQueue[queue] = [];
+        }
+
+        //当前一次请求完成时，需要使用 completeListener 调用队列中的下一次请求
+        //如果完成侦听器已有定义，那么需要首先调用它
+        
+        //取得旧侦听器
+        var userCompleteListener = options.completeListener;
+
+        //添加新侦听器
+        options.completeListener = function() {
+            //如果存在旧的侦听器，就先调用它
+            if (userCompleteListener) {
+                //this 引用的是请求对象
+                userCompleteListener.apply(this, arguments);
+            }
+
+            //从队列中移除这个请求
+            requestQueue[queue].shift();
+
+            //调用队列中的下一项
+            if (requestQueue[queue][0]) {
+                var q = requestQueue[queue][0].req.send(
+                    requestQueue[queue][0].send
+                );
+            }
+        };
+
+        //如果发生了错误，应该通过调用相关的错误处理方法取消队列中的其他请求
+
+        //取得旧侦听器
+        var userErrorListener = options.errorListener;
+
+        //添加新的侦听器
+        options.errorListener = function() {
+            if (userErrorListener) {
+                userErrorListener.apply(this, arguments);
+            }
+
+            //由于已经调用了错误侦听器，故从队列中移除这个请求
+            requestQueue[queue].shift();
+
+            //由于出错需要取消队列中的其余请求，但首先要调用每个请求的 errorListener
+            //通过调用队列中下一项的错误侦听器就能清除所有排队的请求，因为在链中的调用是依次发生的
+
+            if (requestQueue[queue].length) {
+                //取得下一项
+                var q = requestQueue[queue].shift();
+                //中断请求
+                q.req.abort();
+
+                //伪造请求对象，以便 errorListener 认为请求已经完成并相应地运行
+                var fakeRequest = {};
+                //伪造好像请求虽然完成但却失败了一样
+                fakeRequest.status = 0;
+                fakeRequest.readyState = 4;
+
+                fakeRequest.responseText = null;
+                fakeRequest.responseXML = null;
+
+                //设置错误信息，以便需要时显示
+                fakeRequest.statustext = 'A request in the queue received an error';
+                
+                //调用状态改变
+                //readyState 是 4， status 不是 200，则会调用 errorListener
+                q.error.apply(fakeRequest);
+            }
+
+        };
+
+        //将这个请求添加到队列中
+        requestQueue[queue].push({
+            req: getRequestObject(url, options),
+            send: options.send,
+            error: options.errorListener
+        });
+
+        //如果队列的长度表明只有一个项，则调用请求
+        if (requestQueue[queue].length === 1) {
+            ajaxRequest(url, options);
+        }
+    }
+    window['Alex']['ajaxRequestQueue'] = ajaxRequestQueue;
 
     //跨域资源共享 JSONP 实现
     //XssHttpRequest 对象的计数器
