@@ -62,3 +62,36 @@ if (!String.prototype.trim) {
 // 通常所用的空格是 \x20 ，是在标准 ASCII 可见字符 0x20~0x7e 范围内。
 // 而 \xa0 属于 latin1 （ISO/IEC_8859-1）中的扩展字符集字符，代表空白符nbsp(non-breaking space)。
 // latin1 字符集向下兼容 ASCII （ 0x20~0x7e ）。
+
+
+//Array
+//forEach() 方法遍历数组元素，无返回值
+//forEach() 方法按升序为数组中含有效值的每一项执行一次callback 函数，
+//那些已删除或者未初始化的项将被跳过（例如在稀疏数组上）。
+if (!Array.prototype.forEach) {
+    Array.prototype.forEach = function(callback, thisArg) {
+        var scope = thisArg || window;
+        for (var i = 0, len = this.length; i < len; i++) {
+            callback.call(scope, this[i], i, this);
+        }
+    };
+}
+
+//filter() 方法便利数组元素，返回一个返回值为 true 的项组成的新数组
+//filter() 为数组中的每个元素调用一次 callback 函数，
+//并利用所有使得 callback 返回 true 或等价于 true 的值的元素创建一个新数组。
+//callback 只会在已经赋值的索引上被调用，对于那些已经被删除或者从未被赋值的索引不会被调用。
+//那些没有通过 callback 测试的元素会被跳过，不会被包含在新数组中。
+if (!Array.prototype.filter) {
+    Array.prototype.filter = function(callback, thisArg) {
+        var scope = thisArg || window;
+        var a = [];
+        for (var i = 0, len = this.length; i < len; i++) {
+            if (!callback.call(scope, this[i], i, this)) {
+                continue;
+            }
+            a.push(this[i]);
+        }
+        return a;
+    };
+}
